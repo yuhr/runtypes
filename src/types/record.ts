@@ -84,11 +84,27 @@ export function InternalRecord<
     create(
       (x, visited) => {
         if (x === null || x === undefined) {
-          const a = create<any>(_x => ({ success: true, value: _x }), { tag: 'record', fields });
-          return { success: false, message: `Expected ${show(a)}, but was ${x}` };
+          return { success: false, message: `Expected ${show(dummyRecord(fields))}, but was ${x}` };
         }
 
-        for (const key in fields) {
+        const keys = Object.getOwnPropertyNames(fields);
+
+        if (keys.length !== 0) {
+          if (typeof x !== 'object') {
+            return {
+              success: false,
+              message: `Expected ${show(dummyRecord(fields))}, but was ${typeof x}`,
+            };
+          }
+          if (Array.isArray(x)) {
+            return {
+              success: false,
+              message: `Expected ${show(dummyRecord(fields))}, but was array`,
+            };
+          }
+        }
+
+        for (const key of keys) {
           const isOptional = isPartial || fields[key].reflect.tag === 'optional';
           if (hasKey(key, x)) {
             if (isOptional && x[key] === undefined) continue;
@@ -114,6 +130,10 @@ export function InternalRecord<
       { tag: 'record', isPartial, isReadonly, fields },
     ),
   );
+}
+
+function dummyRecord<O extends { [_: string]: Runtype }>(fields: O) {
+  return create<any>(x => ({ success: true, value: x }), { tag: 'record', fields });
 }
 
 export function Record<O extends { [_: string]: Runtype }>(fields: O): Record<O, false> {
