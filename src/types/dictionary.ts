@@ -1,4 +1,5 @@
 import { Runtype, RuntypeBase, create, Static, innerValidate } from '../runtype';
+import { Number } from './number';
 import { String } from './string';
 import { Constraint } from './constraint';
 import show from '../show';
@@ -15,7 +16,7 @@ type StringLiteralFor<K extends DictionaryKeyType> = K extends string
   : never;
 type DictionaryKeyRuntype = RuntypeBase<string | number | symbol>;
 
-const NumberKey = Constraint(String, s => !isNaN(+s), { name: 'number' });
+const NumberLikeKey = Constraint(String, s => s === global.Number(s).toString());
 
 export interface Dictionary<V extends RuntypeBase, K extends DictionaryKeyType>
   extends Runtype<{ [_ in K]: Static<V> }> {
@@ -83,8 +84,8 @@ export function Dictionary<
       : key === 'string'
       ? String
       : key === 'number'
-      ? NumberKey
-      : (key as Exclude<K, string>);
+      ? Number
+      : (key as DictionaryKeyRuntype);
   const keyString = show(keyRuntype as any);
   const self = { tag: 'dictionary', key: keyString, value } as any;
   return create<any>((x, visited) => {
@@ -94,22 +95,20 @@ export function Dictionary<
     if (Object.getPrototypeOf(x) !== Object.prototype)
       if (!Array.isArray(x) || keyString === 'string') return FAILURE.TYPE_INCORRECT(self, x);
 
-    const numberString = /^(?:NaN|-?\d+(?:\.\d+)?)$/u;
     const keys = enumerableKeysOf(x);
     const results = keys.reduce<{ [key in string | number | symbol]: Result<unknown> }>(
       (results, key) => {
         // We should provide interoperability with `number` and `string` here,
         // as a user would expect JavaScript engines to convert numeric keys to
-        // string keys automatically. So, if the key can be interpreted as a
-        // decimal number, then test it against a `Number` OR `String` runtype.
-        const isNumberLikeKey = typeof key === 'string' && numberString.test(key);
-        const keyInterop = isNumberLikeKey ? global.Number(key) : key;
+        // string keys in decimal form automatically. So, if the enumerated key
+        // can be interpreted as a decimal number, then test it as a `string` OR
+        // `number` value.
         if (
-          isNumberLikeKey
-            ? !keyRuntype.guard(keyInterop) && !keyRuntype.guard(key)
-            : !keyRuntype.guard(keyInterop)
+          NumberLikeKey.guard(key)
+            ? !keyRuntype.guard(key) && !keyRuntype.guard(global.Number(key))
+            : !keyRuntype.guard(key)
         ) {
-          results[key as any] = FAILURE.KEY_INCORRECT(self, keyRuntype.reflect, keyInterop);
+          results[key as any] = FAILURE.KEY_INCORRECT(self, keyRuntype.reflect, key);
         } else results[key as any] = innerValidate(value, x[key], visited);
         return results;
       },
